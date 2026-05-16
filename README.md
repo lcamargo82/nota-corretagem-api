@@ -57,7 +57,7 @@ Antes de iniciar, certifique-se de ter instalado em sua máquina:
 
 1. **Clone o repositório:**
    ```bash
-   git clone https://github.com/sua-org/nota-corretagem-api.git
+   git clone https://github.com/lcamargo82/nota-corretagem-api.git
    cd nota-corretagem-api
    ```
 
