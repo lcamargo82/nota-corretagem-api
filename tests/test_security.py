@@ -19,8 +19,8 @@ def test_valid_jwt_token():
 def test_invalid_jwt_token():
     """Testa se um token JWT com assinatura inválida levanta a exceção correta (HTTP 401)."""
     payload = {"sub": "test_system"}
-    # Assina com uma chave errada
-    token = jwt.encode(payload, "wrong_secret_key", algorithm=settings.JWT_ALGORITHM)
+    # Assina com uma chave errada (mas com comprimento seguro > 32 bytes para evitar InsecureKeyLengthWarning)
+    token = jwt.encode(payload, "wrong_secret_key_that_is_long_enough_32_bytes_min", algorithm=settings.JWT_ALGORITHM)
     
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
     

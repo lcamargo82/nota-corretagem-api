@@ -5,7 +5,7 @@ from src.schemas.nota import DadosNotaDTO
 
 def test_process_note_regex_sucesso():
     service = NoteProcessorService()
-    dto = service.process_note("Nota.pdf")
+    dto = service.process_note("notas/Nota.pdf")
     
     assert isinstance(dto, DadosNotaDTO)
     assert dto.cabecalho.numero_nota == 125838
@@ -61,4 +61,4 @@ def test_process_note_fallback_llm(mock_pdf_processor_class):
 def test_process_note_senha_invalida():
     service = NoteProcessorService()
     with pytest.raises(PDFDecryptionError):
-        service.process_note("NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf", password="senha_errada")
+        service.process_note("notas/NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf", password="senha_errada")

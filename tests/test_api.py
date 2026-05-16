@@ -17,7 +17,7 @@ def test_health_check():
 
 def test_processar_nota_sem_token_deve_retornar_401():
     # Sem cabeçalho de autorização
-    with open("Nota.pdf", "rb") as f:
+    with open("notas/Nota.pdf", "rb") as f:
         response = client.post(
             "/api/v1/notas/processar",
             files={"file": ("Nota.pdf", f, "application/pdf")}
@@ -36,7 +36,7 @@ def test_processar_nota_arquivo_invalido():
 
 def test_processar_nota_sucesso():
     token = gerar_token_valido()
-    with open("Nota.pdf", "rb") as f:
+    with open("notas/Nota.pdf", "rb") as f:
         response = client.post(
             "/api/v1/notas/processar",
             headers={"Authorization": f"Bearer {token}"},
@@ -49,7 +49,7 @@ def test_processar_nota_sucesso():
 
 def test_processar_nota_protegida_sem_senha_retorna_422():
     token = gerar_token_valido()
-    with open("NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf", "rb") as f:
+    with open("notas/NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf", "rb") as f:
         response = client.post(
             "/api/v1/notas/processar",
             headers={"Authorization": f"Bearer {token}"},

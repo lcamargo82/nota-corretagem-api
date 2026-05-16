@@ -2,7 +2,7 @@ import pytest
 from src.services.extractors import PDFProcessor, PDFDecryptionError
 
 def test_extracao_nota_sem_senha():
-    processor = PDFProcessor("Nota.pdf")
+    processor = PDFProcessor("notas/Nota.pdf")
     dados = processor.parse()
     
     assert dados["cabecalho"]["numero_nota"] == 125838
@@ -14,7 +14,7 @@ def test_extracao_nota_sem_senha():
     assert dados["resumo_financeiro"]["valor_liquido_nota"] == 2.0
 
 def test_extracao_nota_santander():
-    processor = PDFProcessor("Notas de Corretagem.pdf")
+    processor = PDFProcessor("notas/Notas de Corretagem.pdf")
     dados = processor.parse()
     
     assert dados["cabecalho"]["numero_nota"] == 909475
@@ -25,7 +25,7 @@ def test_extracao_nota_santander():
     assert dados["resumo_financeiro"]["valor_liquido_nota"] == 201.0
 
 def test_extracao_nota_cm_capital():
-    processor = PDFProcessor("NotaCM.pdf")
+    processor = PDFProcessor("notas/NotaCM.pdf")
     dados = processor.parse()
     
     assert dados["cabecalho"]["numero_nota"] == 41192
@@ -38,7 +38,7 @@ def test_extracao_nota_cm_capital():
     assert dados["resumo_financeiro"]["valor_liquido_nota"] == 3750.43
 
 def test_extracao_nota_protegida_sem_senha_deve_falhar():
-    processor = PDFProcessor("NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf")
+    processor = PDFProcessor("notas/NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf")
     with pytest.raises(PDFDecryptionError) as exc_info:
         processor.extract_text()
     assert "PDF protegido por senha" in str(exc_info.value)
