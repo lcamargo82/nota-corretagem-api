@@ -1,10 +1,10 @@
-# Plano de Projeto - API de Importação de Notas de Corretagem (Day Trade)
+# Plano de Projeto - API de Importação de Notas de Corretagem (Day Trade & Swing Trade)
 
 ## 1. Overview
 
-Este documento estabelece o plano arquitetural e de execução para a construção da **Nota Corretagem API**, um microsserviço Python conteinerizado com Docker, focado no processamento e normalização de notas de corretagem Day Trade (padrão SINACOR).
+Este documento estabelece o plano arquitetural e de execução para a construção da **Nota Corretagem API**, um microsserviço Python conteinerizado com Docker, focado no processamento e normalização de notas de corretagem do mercado financeiro brasileiro (padrão SINACOR), com suporte a operações de **Day Trade** e **Swing Trade**.
 
-A API receberá arquivos PDF de um sistema cliente via requisições HTTP REST protegidas por JWT, extrairá os dados de cabeçalho, operações e resumo financeiro (taxas, emolumentos, IRRF 1% "dedo-duro") utilizando um motor híbrido de alta velocidade (`pdfplumber` + Regex) com fallback inteligente para LLM (Ollama/Mistral), e retornará um payload JSON perfeitamente tipado via Pydantic v2. A persistência em banco de dados será realizada pelo sistema cliente, mantendo o microsserviço leve, veloz e puramente focado no parse.
+A API receberá arquivos PDF (com suporte a senhas para arquivos protegidos) de um sistema cliente via requisições HTTP REST protegidas por JWT, extrairá os dados de cabeçalho, operações (identificando a modalidade) e resumo financeiro (taxas, emolumentos, IRRF) utilizando um motor híbrido de alta velocidade (`pdfplumber` + Regex) com fallback inteligente exclusivo para a API em nuvem da **Mistral AI**, e retornará um payload JSON perfeitamente tipado via Pydantic v2. A persistência em banco de dados será realizada pelo sistema cliente.
 
 ---
 
@@ -12,17 +12,17 @@ A API receberá arquivos PDF de um sistema cliente via requisições HTTP REST p
 
 **BACKEND** (Microsserviço de Extração e Ingestão de Dados).
 
-> **Agente Primário Alocado:** `backend-specialist` (com suporte de `security-auditor` para validações de JWT e segredos, e `test-engineer` para garantia de qualidade).
+> **Agente Primário Alocado:** `backend-specialist` (com suporte de `security-auditor` para validações de JWT e segredos, e `devops-engineer` para Docker e versionamento Git).
 
 ---
 
 ## 3. Success Criteria
 
-- **Critério 1 (Ingestão e Validação):** Endpoint `POST /api/v1/notas/importar` funcional, aceitando arquivos PDF via form-data e validando corretamente a presença e validade do token JWT no header `Authorization`.
-- **Critério 2 (Precisão do Parser SINACOR):** Motor de extração Regex/pdfplumber capturando 100% dos campos de cabeçalho, tabela de negócios e rodapé financeiro nas notas de referência (`Nota.pdf`, `Notas de Corretagem.pdf`, `NotaCM.pdf`).
-- **Critério 3 (Fallback LLM Resiliente):** Integração com Ollama (Local) e Mistral API (Nuvem) implementada e funcional para cenários de falha do Regex ou PDFs escaneados.
-- **Critério 4 (Validação Pydantic v2):** Retorno HTTP perfeitamente estruturado de acordo com os schemas Pydantic, garantindo tipagem forte e validação de regras financeiras (ex: cálculo de Mercado Futuro WIN/WDO).
-- **Critério 5 (Conteinerização e Paridade):** Arquivos `Dockerfile` (multi-stage) e `docker-compose.yml` funcionais, permitindo inicialização limpa nos modos de desenvolvimento (`dev` com hot-reload) e produção (`prod` otimizado).
+- **Critério 1 (Ingestão com Senha e Validação JWT):** Endpoint `POST /api/v1/notas/importar` funcional, aceitando arquivos PDF e campo opcional `password` via form-data, e validando corretamente a presença e validade do token JWT no header `Authorization`.
+- **Critério 2 (Precisão do Parser SINACOR com Senha):** Motor de extração Regex/pdfplumber capturando 100% dos campos de cabeçalho, tabela de negócios e rodapé financeiro nas 4 notas de referência da raiz, abrindo com sucesso a nota protegida por senha.
+- **Critério 3 (Suporte a Day Trade e Swing Trade):** Contratos Pydantic e motor de extração identificando e segregando corretamente operações iniciadas e encerradas no mesmo dia (Day Trade) daquelas mantidas em carteira (Swing Trade).
+- **Critério 4 (Fallback Mistral API Resiliente):** Integração exclusiva com a Mistral API em nuvem implementada e funcional para cenários de falha do Regex ou PDFs escaneados.
+- **Critério 5 (Conteinerização e Paridade):** Arquivos `Dockerfile` (multi-stage) e `docker-compose.yml` funcionais para os modos de desenvolvimento (`dev` com hot-reload) e produção (`prod` otimizado).
 
 ---
 
@@ -33,11 +33,11 @@ A API receberá arquivos PDF de um sistema cliente via requisições HTTP REST p
 | **Python 3.11+** | Linguagem base, oferecendo excelente ecossistema para manipulação de PDFs e IA. |
 | **FastAPI** | Framework web de altíssima performance, suporte nativo a concorrência (async/sync) e OpenAPI. |
 | **Pydantic v2 & Settings** | Validação estrita de contratos de dados (Input/Output) e gestão segura de variáveis de ambiente (`.env`). |
-| **pdfplumber & pypdf** | Ferramentas de extração de texto e layout de PDFs página a página com precisão de coordenadas. |
+| **pdfplumber & pypdf** | Ferramentas de extração de texto e layout de PDFs com suporte nativo a descriptografia por senha. |
 | **PyJWT & Cryptography** | Implementação de segurança para verificação e decodificação de tokens JWT. |
-| **Requests / MistralAI** | Clientes HTTP para comunicação com o Ollama local e a API em nuvem da Mistral AI. |
+| **Requests / MistralAI** | Cliente HTTP para comunicação com a API em nuvem da Mistral AI. |
 | **Docker & Compose** | Empacotamento, isolamento de ambiente e orquestração de serviços para dev e prod. |
-| **Pytest & Coverage** | Suíte de testes unitários e de integração para validação contínua do parser. |
+| **Pytest & Coverage** | Suíte de testes unitários e de integração para validação cont뜛nua do parser. |
 
 ---
 
@@ -92,42 +92,42 @@ nota-corretagem-api/
 - **OUTPUT:** Módulos `config.py` e `security.py` implementados e validados.
 - **VERIFY:** Executar teste unitário confirmando que requisições com tokens JWT válidos passam pela dependência e tokens inválidos levantam `HTTPException(401)`.
 
-### Tarefa 2: Schemas Pydantic v2 (Contratos de Dados)
+### Tarefa 2: Schemas Pydantic v2 (Contratos com Day/Swing Trade)
 - **ID:** `TASK-02`
 - **Agente:** `backend-specialist` | **Skill:** `python-patterns`
-- **Descrição:** Desenvolver os schemas em `src/schemas/nota.py` representando o cabeçalho (`CabecalhoNota`), as operações (`OperacaoNota`), o resumo financeiro (`ResumoFinanceiro`) e o DTO de resposta final (`NotaCorretagemResponse`).
-- **INPUT:** Especificação de campos do PRD/SSD.
+- **Descrição:** Desenvolver os schemas em `src/schemas/nota.py` representando o cabeçalho (`CabecalhoNota`), as operações com a flag de modalidade (`OperacaoNota`), o resumo financeiro com IRRF segregado (`ResumoFinanceiro`) e o DTO de resposta final (`NotaCorretagemResponse`).
+- **INPUT:** Especificação de campos do PRD/SSD atualizados.
 - **OUTPUT:** Arquivo `src/schemas/nota.py` perfeitamente tipado com validadores internos.
-- **VERIFY:** Instanciar objetos de teste garantindo que validações de valores monetários e tipos de mercado funcionam corretamente.
+- **VERIFY:** Instanciar objetos de teste garantindo que validações de modalidade (`DAY_TRADE` / `SWING_TRADE`) e valores monetários funcionam corretamente.
 
-### Tarefa 3: Motor de Extração de PDF (pdfplumber + Regex)
+### Tarefa 3: Motor de Extração de PDF com Suporte a Senha (pdfplumber + Regex)
 - **ID:** `TASK-03`
 - **Agente:** `backend-specialist` | **Skill:** `python-patterns`
-- **Descrição:** Implementar `src/services/extractors.py` contendo a classe `PDFProcessor` para leitura de páginas e parse via expressões regulares (Regex) focadas no padrão SINACOR.
-- **INPUT:** PDFs de referência (`Nota.pdf`, `Notas de Corretagem.pdf`, `NotaCM.pdf`).
-- **OUTPUT:** Classe `PDFProcessor` capaz de extrair os blocos estruturados.
-- **VERIFY:** Executar script de teste passando os 3 PDFs de referência e confirmando a extração correta de 100% dos dados no caminho feliz.
+- **Descrição:** Implementar `src/services/extractors.py` contendo a classe `PDFProcessor` para abertura de PDFs (utilizando o parâmetro `password`) e parse via expressões regulares (Regex) focadas no padrão SINACOR.
+- **INPUT:** 4 PDFs de referência da raiz (incluindo o PDF protegido por senha).
+- **OUTPUT:** Classe `PDFProcessor` capaz de extrair e descriptografar os blocos estruturados.
+- **VERIFY:** Executar script de teste passando os 4 PDFs de referência (fornecendo a senha para o protegido) e confirmando a extração correta.
 
-### Tarefa 4: Motor de LLM Fallback (Ollama & Mistral API)
+### Tarefa 4: Motor de LLM Fallback (Mistral API Exclusivo)
 - **ID:** `TASK-04`
 - **Agente:** `backend-specialist` | **Skill:** `python-patterns`
-- **Descrição:** Criar `src/services/llm_engine.py` contendo a classe `LLMClient` para comunicação com Ollama (local) e Mistral API (nuvem), utilizando prompts estruturados para extração de transações quando o Regex falhar.
+- **Descrição:** Criar `src/services/llm_engine.py` contendo a classe `LLMClient` para comunicação exclusiva com a Mistral API em nuvem, utilizando prompts estruturados para extração de transações quando o Regex falhar.
 - **INPUT:** Texto bruto ou imagem de PDF escaneado.
 - **OUTPUT:** Classe `LLMClient` funcional com tratamento de erros e resiliência.
-- **VERIFY:** Simular chamada ao Ollama/Mistral com texto de extrato e verificar retorno do JSON estruturado.
+- **VERIFY:** Simular chamada à Mistral API com texto de extrato e verificar retorno do JSON estruturado.
 
-### Tarefa 5: Serviço Orquestrador de Processamento e Cálculos Financeiros
+### Tarefa 5: Serviço Orquestrador e Classificação Day/Swing Trade
 - **ID:** `TASK-05`
 - **Agente:** `backend-specialist` | **Skill:** `python-patterns`
-- **Descrição:** Implementar `src/services/processor.py` (`BankStatementProcessor`) e `src/utils/financial.py`. O orquestrador tentará o Regex primeiro, acionará o LLM se necessário, aplicará os cálculos de ajuste BM&F (WIN/WDO) e validará contra os schemas Pydantic.
-- **INPUT:** Arquivo PDF temporário e parâmetros de provedor.
+- **Descrição:** Implementar `src/services/processor.py` (`BankStatementProcessor`) e `src/utils/financial.py`. O orquestrador tentará o Regex primeiro (com senha), acionará a Mistral API se necessário, aplicará a classificação de Day Trade vs Swing Trade e validará contra os schemas Pydantic.
+- **INPUT:** Arquivo PDF temporário, senha opcional e modelo Mistral.
 - **OUTPUT:** Payload final normalizado no formato `NotaCorretagemResponse`.
 - **VERIFY:** Processar um PDF completo ponta a ponta e validar a conformidade do payload gerado.
 
-### Tarefa 6: Rotas FastAPI e Inicialização da Aplicação
+### Tarefa 6: Rotas FastAPI com Senha Opcional e Inicialização da Aplicação
 - **ID:** `TASK-06`
 - **Agente:** `backend-specialist` | **Skill:** `api-patterns`
-- **Descrição:** Desenvolver `src/api/v1/endpoints/notas.py` com o endpoint `POST /importar` e inicializar o app em `src/main.py`, registrando roteadores, middlewares de CORS e tratamento de exceções.
+- **Descrição:** Desenvolver `src/api/v1/endpoints/notas.py` com o endpoint `POST /importar` (aceitando `file`, `password` e `model_name`) e inicializar o app em `src/main.py`.
 - **INPUT:** Serviços e dependências previamente criados.
 - **OUTPUT:** Aplicação FastAPI completa e funcional.
 - **VERIFY:** Acessar `http://localhost:8000/docs` e realizar requisição de teste via cURL ou Swagger UI.
@@ -138,7 +138,7 @@ nota-corretagem-api/
 - **Descrição:** Criar o `Dockerfile` com multi-stage build otimizado para Python 3.11+ e os arquivos `docker-compose.yml` (desenvolvimento com hot-reload) e `docker-compose.prod.yml` (produção otimizada).
 - **INPUT:** Aplicação FastAPI estruturada.
 - **OUTPUT:** Manifestos Docker completos.
-- **VERIFY:** Executar `docker compose up --build` e confirmar que o container sobe saudável sem erros de inicialização.
+- **VERIFY:** Executar `docker compose up --build` e confirmar que o container sobe saudável.
 
 ---
 
@@ -150,9 +150,9 @@ Esta fase garante a qualidade, segurança e corretude arquitetural do projeto an
 
 - [ ] **Verificação de Segurança (P0):** Nenhuma chave ou segredo hardcodado no código; uso estricto do `.env` e validação de JWT ativa nas rotas.
 - [ ] **Qualidade de Código e Tipagem (P0):** Código seguindo padrões PEP8, sem erros de tipagem no Pydantic ou funções sem type hints.
-- [ ] **Validação de Contrato de API (P1):** OpenAPI/Swagger UI gerado corretamente, refletindo esquemas de autenticação e modelos de resposta.
-- [ ] **Testes de Integração e Parser (P1):** Suíte de testes automatizados executando com sucesso contra os PDFs de referência.
-- [ ] **Auditoria Docker (P2):** Build multi-stage gerando imagem leve e segura, com volumes e portas configurados corretamente no Compose.
+- [ ] **Validação de Contrato de API (P1):** OpenAPI/Swagger UI gerado corretamente, refletindo suporte a senhas e modalidades.
+- [ ] **Testes de Integração e Parser (P1):** Suíte de testes automatizados executando com sucesso contra as 4 notas de referência.
+- [ ] **Auditoria Docker (P2):** Build multi-stage gerando imagem leve e segura.
 
 ### Comandos de Verificação Automatizada
 
@@ -160,10 +160,11 @@ Esta fase garante a qualidade, segurança e corretude arquitetural do projeto an
 # 1. Validação de Testes e Cobertura dentro do Container
 docker compose exec app pytest -v --cov=src
 
-# 2. Teste de Carga e Concorrência Básica (Simulação de Chamada Síncrona)
+# 2. Teste de Carga e Concorrência Básica (Simulação de Chamada Síncrona com Senha)
 curl -X POST "http://localhost:8000/api/v1/notas/importar" \
   -H "Authorization: Bearer TOKEN_TESTE" \
-  -F "file=@./Nota.pdf"
+  -F "file=@./NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf" \
+  -F "password=senha_correta"
 
 # 3. Verificação de Logs e Saúde do Container
 docker compose logs --tail=50 app
@@ -174,7 +175,7 @@ docker compose logs --tail=50 app
 ```markdown
 ## ✅ PHASE X COMPLETE
 - Segurança: ✅ Pass (Segredos no .env, JWT Ativo)
-- Testes: ✅ Pass (100% dos PDFs de referência analisados com sucesso)
+- Testes: ✅ Pass (100% das 4 notas de referência analisadas com sucesso)
 - Docker: ✅ Pass (Containers Dev e Prod saudáveis)
 - Data: [Data de Conclusão]
 ```

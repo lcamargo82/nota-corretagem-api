@@ -1,6 +1,6 @@
-# 📊 Nota Corretagem API (Day Trade Parser)
+# 📊 Nota Corretagem API (Day Trade & Swing Trade Parser)
 
-> Microsserviço de alta performance em Python (FastAPI) e Docker para ingestão, extração estruturada e normalização de notas de corretagem de Day Trade (Padrão SINACOR).
+> Microsserviço de alta performance em Python (FastAPI) e Docker para ingestão, extração estruturada e normalização de notas de corretagem (Padrão SINACOR), com suporte a PDFs protegidos por senha e fallback inteligente de IA.
 
 ---
 
@@ -13,6 +13,10 @@
 - [Executando a Aplicação (Docker)](#-executando-a-aplicação-docker)
   - [Ambiente de Desenvolvimento](#ambiente-de-desenvolvimento-dev)
   - [Ambiente de Produção](#ambiente-de-produção-prod)
+- [Guia de Integração para Outros Sistemas (S2S)](#-guia-de-integração-para-outros-sistemas-s2s)
+  - [Fluxo de Autenticação JWT](#1-fluxo-de-autenticação-jwt)
+  - [Tratamento de PDFs com Senha](#2-tratamento-de-pdfs-com-senha)
+  - [Segregação Day Trade e Swing Trade](#3-segregação-day-trade-e-swing-trade)
 - [Documentação da API e Endpoints](#-documentação-da-api-e-endpoints)
 - [Exemplo de Uso com cURL](#-exemplo-de-uso-com-curl)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
@@ -22,7 +26,7 @@
 
 ## 🚀 Visão Geral
 
-A **Nota Corretagem API** atua como um motor de extração financeiro independente. Projetada para integrar-se ao ecossistema de microsserviços da plataforma principal, ela recebe arquivos PDF de notas de corretagem, realiza o parse avançado via `pdfplumber` (Regex) com fallback inteligente para LLM (Ollama/Mistral) e retorna um JSON perfeitamente tipado e estruturado via Pydantic v2.
+A **Nota Corretagem API** atua como um motor de extração financeiro independente. Projetada para integrar-se ao ecossistema de microsserviços da plataforma principal, ela recebe arquivos PDF de notas de corretagem (inclusive arquivos protegidos por senha), realiza o parse avançado via `pdfplumber` (Regex) com fallback inteligente para a API em nuvem da **Mistral AI** e retorna um JSON perfeitamente tipado e estruturado via Pydantic v2.
 
 O microsserviço é protegido por autenticação JWT, garantindo comunicação segura entre sistemas (S2S), e isola completamente credenciais de IA no arquivo `.env`.
 
@@ -33,8 +37,8 @@ O microsserviço é protegido por autenticação JWT, garantindo comunicação s
 - **Linguagem:** Python 3.11+
 - **Framework Web:** FastAPI (Alta performance, suporte nativo a Async e OpenAPI)
 - **Validação e Contratos:** Pydantic v2 & Pydantic Settings
-- **Processamento de PDF:** `pdfplumber` e `pypdf`
-- **Motor de IA (Fallback):** Ollama (Local) e Mistral AI API (Nuvem)
+- **Processamento de PDF:** `pdfplumber` e `pypdf` (com suporte a descriptografia)
+- **Motor de IA (Fallback):** Mistral AI API (Nuvem)
 - **Segurança:** Autenticação JWT (`PyJWT`), proteção de segredos via `.env`
 - **DevOps:** Docker e Docker Compose (Multi-stage build)
 
@@ -75,9 +79,7 @@ Antes de iniciar, certifique-se de ter instalado em sua máquina:
    JWT_SECRET_KEY=sua_chave_secreta_jwt_super_segura_aqui
    JWT_ALGORITHM=HS256
 
-   # Configurações de IA (Fallback)
-   # Nota: No Docker para Mac/Windows, use http://host.docker.internal:11434 para acessar o Ollama da máquina host
-   OLLAMA_BASE_URL=http://host.docker.internal:11434
+   # Configurações de IA (Fallback Exclusivo Mistral AI)
    MISTRAL_API_KEY=sua_api_key_da_mistral_aqui
    ```
 
@@ -114,6 +116,38 @@ docker compose logs -f app
 
 ---
 
+## 🔗 Guia de Integração para Outros Sistemas (S2S)
+
+Este microsserviço foi desenhado para ser consumido por outros backends do ecossistema. Abaixo estão as diretrizes para uma integração robusta e segura.
+
+### 1. Fluxo de Autenticação JWT
+
+Todas as requisições para a API devem incluir um token JWT válido no cabeçalho `Authorization`. 
+- **Formato:** `Authorization: Bearer <SEU_TOKEN_JWT>`
+- O token deve ser assinado com a mesma `JWT_SECRET_KEY` e algoritmo (`JWT_ALGORITHM`) configurados no `.env` da API de Notas.
+- **Payload Recomendado do Token:**
+  ```json
+  {
+    "sub": "backend-principal",
+    "role": "service",
+    "exp": 1779000000
+  }
+  ```
+
+### 2. Tratamento de PDFs com Senha
+
+Muitas corretoras enviam notas de corretagem protegidas pela senha do cliente (frequentemente o CPF ou data de nascimento).
+- O sistema chamador deve verificar se o PDF exige senha ou solicitar a senha ao usuário final.
+- Ao fazer o upload para a API de Notas, envie a senha no campo `password` do form-data.
+- **Comportamento da API:** Se o arquivo for protegido e o campo `password` não for enviado (ou estiver incorreto), a API retornará o status **422 Unprocessable Entity** com a mensagem `PDF protegido por senha. Forneça a senha correta no campo 'password'`.
+
+### 3. Segregação Day Trade e Swing Trade
+
+O contrato de resposta da API de Notas devolve cada operação com a flag `modalidade` (`DAY_TRADE` ou `SWING_TRADE`).
+- O backend chamador deve utilizar essa classificação ao salvar no banco de dados para garantir que o cálculo de imposto de renda aplique as alíquotas corretas (20% para Day Trade, 15% para Swing Trade) e respeite a regra de isenção de R$ 20 mil mensais exclusiva para vendas de ações em Swing Trade.
+
+---
+
 ## 🔌 Documentação da API e Endpoints
 
 A documentação interativa da API é gerada automaticamente pelo FastAPI (OpenAPI/Swagger) e pode ser acessada pelo navegador quando o servidor estiver rodando:
@@ -131,16 +165,16 @@ A documentação interativa da API é gerada automaticamente pelo FastAPI (OpenA
 
 ## 💻 Exemplo de Uso com cURL
 
-Para simular a requisição feita pelo sistema chamador, utilize o comando `curl` abaixo. Substitua `SEU_TOKEN_JWT_AQUI` por um token válido e aponte para um arquivo PDF real.
+Para simular a requisição feita pelo sistema chamador (enviando um PDF protegido por senha), utilize o comando `curl` abaixo:
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/notas/importar" \
   -H "Authorization: Bearer SEU_TOKEN_JWT_AQUI" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
-  -F "file=@./Nota.pdf;type=application/pdf" \
-  -F "provider=ollama" \
-  -F "model_name=mistral"
+  -F "file=@./NotaNegociacao-18526735-01-08-2025-31-08-2025-0.pdf;type=application/pdf" \
+  -F "password=senha_do_pdf_aqui" \
+  -F "model_name=mistral-tiny"
 ```
 
 ### Resposta de Sucesso Esperada (JSON)
@@ -151,8 +185,8 @@ curl -X POST "http://localhost:8000/api/v1/notas/importar" \
   "ambiente": "development",
   "dados": {
     "cabecalho": {
-      "numero_nota": 987654,
-      "data_pregao": "2026-05-16",
+      "numero_nota": 18526735,
+      "data_pregao": "2025-08-01",
       "cpf_cliente": "123.456.789-00",
       "corretora_nome": "XP INVESTIMENTOS CCTVM S/A"
     },
@@ -164,16 +198,18 @@ curl -X POST "http://localhost:8000/api/v1/notas/importar" \
         "quantidade": 1000,
         "preco_unitario": 62.30,
         "valor_total": 62300.00,
-        "debito_credito": "D"
+        "debito_credito": "D",
+        "modalidade": "SWING_TRADE"
       },
       {
         "tipo_operacao": "V",
         "mercado": "VISTA",
-        "ativo": "VALE3",
+        "ativo": "PETR4",
         "quantidade": 1000,
-        "preco_unitario": 63.00,
-        "valor_total": 63000.00,
-        "debito_credito": "C"
+        "preco_unitario": 38.00,
+        "valor_total": 38000.00,
+        "debito_credito": "C",
+        "modalidade": "DAY_TRADE"
       }
     ],
     "resumo_financeiro": {
@@ -181,7 +217,8 @@ curl -X POST "http://localhost:8000/api/v1/notas/importar" \
       "emolumentos": 11.20,
       "taxa_corretagem": 0.00,
       "iss": 0.00,
-      "irrf_dedo_duro": 7.00,
+      "irrf_day_trade": 5.00,
+      "irrf_swing_trade": 1.90,
       "valor_liquido_nota": 665.30
     }
   }
@@ -206,10 +243,10 @@ nota-corretagem-api/
 │   │   └── nota.py             # Schemas de validação de Input/Output (Pydantic v2)
 │   ├── services/
 │   │   ├── processor.py        # Orquestrador do fluxo de extração
-│   │   ├── extractors.py       # Extração via pdfplumber e Regex
-│   │   └── llm_engine.py       # Integração com Ollama e Mistral API
+│   │   ├── extractors.py       # Extração via pdfplumber (com suporte a senha) e Regex
+│   │   └── llm_engine.py       # Integração com Mistral API
 │   └── utils/
-│       └── financial.py        # Cálculos de ajuste de Mercado Futuro (WIN/WDO)
+│       └── financial.py        # Cálculos de ajuste e classificação Day/Swing Trade
 ├── Dockerfile                  # Manifesto de construção Docker
 ├── docker-compose.yml          # Orquestrador Docker Compose
 └── requirements.txt            # Dependências do Python
